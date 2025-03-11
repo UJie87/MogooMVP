@@ -22,5 +22,5 @@
 ## 接下來工作
 - **2024資料匯入database 完整整體的SAP, WAP**
 - **Offshore WAP, Small hydro average performance**
-- **把SAP/ WAP 轉為tou 形式**
+- **把APs 轉為tou 形式**
 - **需電方用電資訊匯入跑不同情境結果**
