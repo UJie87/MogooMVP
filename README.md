@@ -19,3 +19,8 @@
   - 陸域風力的加權平均發電表現 (WAP, Wind Average Performance) 由 2022、2023 年的台中港、王功、觀園歷史發電數據加權平均計算。
   - (請參考 `solar_average_performance.csv` & `wind_average_performance.csv`)
 
+## 接下來工作
+- **2024資料匯入database 完整整體的SAP, WAP**
+- **Offshore WAP, Small hydro average performance**
+- **把SAP/ WAP 轉為tou 形式**
+- **需電方用電資訊匯入跑不同情境結果**
