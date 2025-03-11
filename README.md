@@ -1,9 +1,5 @@
 # MogooMVP
 
-## 專案簡介
-
-MogooMVP 是一個以 Python 為核心的專案，目標是建立一個 B2B 再生能源數據庫，讓企業、媒體、政府與產業組織能夠更輕鬆地取得相關資訊。
-
 ## 主要 Python 檔案說明
 
 - **time_of_use_visualization.py**：
