@@ -56,7 +56,6 @@ class PowerPlantAnalyzer:
         """
         計算 Solar Average Performance (SAP)
         SAP 是一個加權平均值，代表太陽能電廠的整體發電效率表現
-        計算方式為：Σ(容量 × 發電效率) / Σ(容量)
         """
         # 添加月日時間列（不含年份）
         data['month_day_time'] = data['datentime'].dt.strftime('%m-%d %H:%M')

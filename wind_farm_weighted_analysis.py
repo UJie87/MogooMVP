@@ -140,7 +140,7 @@ class WindFarmAnalyzer:
         plot_dates = [x[:5] for x in wap.index]  # 只取月-日部分
         
         # 設定顏色映射
-        colors = {'王功': 'blue', '台中港': 'green', '觀園': 'purple'}
+        colors = {'王功': 'blue', '台中港': 'green', '觀園': 'yellow'}
         
         # 繪製各風場數據
         for facility in data['facility_name'].unique():
@@ -284,9 +284,9 @@ def main():
     
     # 設定風場容量（kW）
     capacities = {
-        '王功': 122000,
-        '台中港': 110000,
-        '觀園': 100000
+        '王功': 23000,
+        '台中港': 26000,
+        '觀園': 30000
     }
     
     try:
