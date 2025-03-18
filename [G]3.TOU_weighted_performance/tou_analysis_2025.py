@@ -1,14 +1,15 @@
 import pandas as pd
 import os
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
+import calendar
 
 class TOUAnalyzer2025:
     def __init__(self):
         """
         初始化2025年TOU分析器
         """
+        self.input_file = r'C:\Users\You Jie Tsai\Desktop\python\[G tool]-combined_performance_forstep2-3\combined_performance.csv'
         self.base_path = os.path.dirname(os.path.abspath(__file__))
-        self.input_file = os.path.join(self.base_path, 'combined_performance.csv')
         self.output_file = os.path.join(self.base_path, 'monthly_tou_averages_2025.csv')
 
     def is_summer_season(self, month, day):
@@ -73,6 +74,62 @@ class TOUAnalyzer2025:
             else:
                 return 'off-peak'
 
+    def calculate_monthly_hours(self, year=2025):
+        """
+        計算每個月份中各個TOU時段的實際小時數
+        """
+        monthly_hours = []
+        
+        for month in range(1, 13):
+            # 取得該月的天數
+            num_days = calendar.monthrange(year, month)[1]
+            
+            # 初始化該月各時段的小時數
+            peak_hours = 0
+            mid_peak_hours = 0
+            off_peak_hours = 0
+            sat_mid_peak_hours = 0
+            
+            for day in range(1, num_days + 1):
+                # 建立日期物件
+                date = datetime(year, month, day)
+                weekday = date.weekday()  # 0-6, 0是週一
+                is_summer = self.is_summer_season(month, day)
+                
+                # 星期日
+                if weekday == 6:
+                    off_peak_hours += 24
+                    continue
+                
+                # 星期六
+                if weekday == 5:
+                    if is_summer:
+                        sat_mid_peak_hours += 15  # 9:00-23:59
+                        off_peak_hours += 9  # 0:00-8:59
+                    else:
+                        sat_mid_peak_hours += 15  # 6:00-10:59 + 14:00-23:59
+                        off_peak_hours += 9  # 剩餘時間
+                    continue
+                
+                # 平日
+                if is_summer:
+                    peak_hours += 6  # 16:00-21:59
+                    mid_peak_hours += 8  # 9:00-15:59 + 22:00-23:59
+                    off_peak_hours += 10  # 0:00-8:59
+                else:
+                    mid_peak_hours += 15  # 6:00-10:59 + 14:00-23:59
+                    off_peak_hours += 9  # 剩餘時間
+            
+            # 將該月的統計加入結果
+            monthly_hours.extend([
+                {'month': month, 'tou': 'peak', 'theoretical_hours': peak_hours},
+                {'month': month, 'tou': 'mid-peak', 'theoretical_hours': mid_peak_hours},
+                {'month': month, 'tou': 'off-peak', 'theoretical_hours': off_peak_hours},
+                {'month': month, 'tou': 'Sat. mid-p', 'theoretical_hours': sat_mid_peak_hours}
+            ])
+        
+        return pd.DataFrame(monthly_hours)
+
     def analyze_tou(self):
         """
         分析2025年TOU數據
@@ -90,25 +147,21 @@ class TOUAnalyzer2025:
             print("\n正在計算TOU時段...")
             df['tou'] = df.apply(self.get_tou_period, axis=1)
             
-            # 顯示計算過程的範例（以1月1日為例）
-            print("\n計算過程範例（1月1日）：")
-            sample_day = df[df['date'] == '01-01'].copy()
-            print("\n1月1日的數據：")
-            print(sample_day[['date', 'time', '2025 weekday', 'tou', 'SAP', 'WAP', 'HAP', 'OWAP']].head(10))
-            
             # 計算每月不同TOU時段的平均值
             print("\n正在計算月度TOU平均值...")
             monthly_averages = df.groupby(['month', 'tou'])[['SAP', 'WAP', 'HAP', 'OWAP']].mean().reset_index()
             
-            # 顯示分組計算的過程
-            print("\n分組計算過程：")
-            for month in range(1, 13):
-                month_data = df[df['month'] == month]
-                print(f"\n第 {month} 月：")
-                print(f"總記錄數：{len(month_data)}")
-                tou_counts = month_data['tou'].value_counts()
-                print("各TOU時段的記錄數：")
-                print(tou_counts)
+            # 計算理論小時數
+            theoretical_hours = self.calculate_monthly_hours()
+            
+            # 合併平均值和理論小時數
+            monthly_averages = pd.merge(monthly_averages, theoretical_hours, on=['month', 'tou'])
+            
+            # 計算加權值 (值 * 小時數 * 1/100)
+            monthly_averages['SAP_kWh'] = monthly_averages['SAP'] * monthly_averages['theoretical_hours'] * 0.01
+            monthly_averages['WAP_kWh'] = monthly_averages['WAP'] * monthly_averages['theoretical_hours'] * 0.01
+            monthly_averages['HAP_kWh'] = monthly_averages['HAP'] * monthly_averages['theoretical_hours'] * 0.01
+            monthly_averages['OWAP_kWh'] = monthly_averages['OWAP'] * monthly_averages['theoretical_hours'] * 0.01
             
             # 排序結果
             monthly_averages = monthly_averages.sort_values(['month', 'tou'])

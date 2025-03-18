@@ -56,7 +56,7 @@ class WindFarmAnalyzer:
         """
         計算 Wind Average Performance (WAP)
         WAP 是一個加權平均值，代表風力發電場的整體發電效率表現
-        計算方式為：Σ(容量 × 發電效率) / Σ(容量)
+        計算方式為：Σ(實際發電量 × 發電效率) / Σ(實際發電量)
         """
         # 添加月日時間列（不含年份）
         data['month_day_time'] = data['datentime'].dt.strftime('%m-%d %H:%M')
