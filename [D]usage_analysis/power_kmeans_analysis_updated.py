@@ -53,9 +53,24 @@ try:
         
         query = f"""
         WITH monthly_total AS (
-            SELECT year, month, SUM(total_usage) as total_monthly
+            SELECT 
+                year, 
+                month, 
+                SUM(total_usage) as total_monthly,
+                CASE 
+                    WHEN month IN (5,6,7,8,9,10) THEN 'summer'
+                    ELSE 'nonsummer'
+                END as season
             FROM {table}
             GROUP BY year, month
+        ),
+        seasonal_total AS (
+            SELECT 
+                year,
+                SUM(CASE WHEN season = 'summer' THEN total_monthly ELSE 0 END) as summer_total,
+                SUM(CASE WHEN season = 'nonsummer' THEN total_monthly ELSE 0 END) as nonsummer_total
+            FROM monthly_total
+            GROUP BY year
         ),
         usage_by_period AS (
             SELECT 
@@ -103,9 +118,11 @@ try:
                 THEN ROUND(COALESCE(u.sat_midpeak / NULLIF(u.midpeak, 0) * 100, 0), 2)
                 ELSE NULL 
             END as summer_sat_midpeak_ratio,
-            t.total_monthly
+            t.total_monthly,
+            ROUND(COALESCE(s.summer_total / NULLIF(s.nonsummer_total, 0) * 100, 0), 2) as summer_to_nonsummer_ratio
         FROM monthly_total t
         JOIN usage_by_period u ON t.year = u.year AND t.month = u.month
+        JOIN seasonal_total s ON t.year = s.year
         ORDER BY u.year, u.month
         """
         df = pd.read_sql_query(query, connection)
@@ -119,7 +136,8 @@ try:
         'peak_ratio',
         'nonsummer_midpeak_ratio', 'summer_midpeak_ratio',
         'nonsummer_offpeak_ratio', 'summer_offpeak_ratio',
-        'nonsummer_sat_midpeak_ratio', 'summer_sat_midpeak_ratio'
+        'nonsummer_sat_midpeak_ratio', 'summer_sat_midpeak_ratio',
+        'summer_to_nonsummer_ratio'  # 新增的特徵
     ]
     
     # 處理空值
@@ -181,7 +199,8 @@ try:
                 'Non-Summer Off-peak': site_features['nonsummer_offpeak_ratio'],
                 'Summer Off-peak': site_features['summer_offpeak_ratio'],
                 'Non-Summer Sat.Mid-peak': site_features['nonsummer_sat_midpeak_ratio'],
-                'Summer Sat.Mid-peak': site_features['summer_sat_midpeak_ratio']
+                'Summer Sat.Mid-peak': site_features['summer_sat_midpeak_ratio'],
+                'Summer/Non-Summer Ratio': site_features['summer_to_nonsummer_ratio']  # 新增的特徵
             },
             title=f'案場用電模式分群結果 (K={k}) (PCA降維展示)'
         )
