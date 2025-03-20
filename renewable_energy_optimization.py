@@ -23,7 +23,7 @@ class RenewableEnergyOptimizer:
             "ow_max": 400000  # 離岸風電最大容量
         }
         
-        # 成本係數（NTD/kW, 20年）
+        # 成本係數（NTD/kW, 1年）
         self.cost_coefficients = {
             "s": 1690.96 * 5.8,    # 太陽能
             "w": 4235.91 * 5.5,    # 陸上風電
@@ -234,10 +234,10 @@ class RenewableEnergyOptimizer:
         print(f"狀態: {result['status']}")
         print(f"\n可再生能源目標: {result['re_target']:.2f} kWh")
         print("\n最佳組合:")
-        print(f"太陽能 (s'): {result['s_prime']:.2f} kW")
-        print(f"陸上風電 (w'): {result['w_prime']:.2f} kW")
-        print(f"小水電 (h'): {result['h_prime']:.2f} kW")
-        print(f"離岸風電 (ow'): {result['ow_prime']:.2f} kW")
+        print(f"太陽能: {result['s_prime']:.2f} kW")
+        print(f"陸上風電: {result['w_prime']:.2f} kW")
+        print(f"小水電: {result['h_prime']:.2f} kW")
+        print(f"離岸風電: {result['ow_prime']:.2f} kW")
         
         print(f"\n總採購成本: {result['total_cost']:.2f} NTD")
         print(f"單位成本: {result['unit_cost']:.2f} NTD/kWh")
