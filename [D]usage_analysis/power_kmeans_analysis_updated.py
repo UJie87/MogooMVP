@@ -8,6 +8,7 @@ import plotly.express as px
 from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
 import os
+from datetime import datetime
 
 # 確保輸出資料夾存在
 output_folder = "power_usage_plots"
@@ -30,7 +31,7 @@ try:
     print("\n收集數據進行分群分析...")
     all_results = []
     
-    # 獲取摘要表列表
+    # 獲取摘要表列表（排除parking）
     cursor.execute("""
         SELECT table_name 
         FROM information_schema.tables 
@@ -41,7 +42,7 @@ try:
     summary_tables = [table[0] for table in cursor.fetchall()]
     
     if not summary_tables:
-        raise Exception("未找到任何 summary_ 開頭的表格！")
+        raise Exception("未找到任何符合條件的摘要表！")
     
     print(f"找到的摘要表：{', '.join(summary_tables)}")
     
@@ -78,7 +79,7 @@ try:
                 ELSE NULL 
             END as nonsummer_midpeak_ratio,
             CASE 
-                WHEN u.month IN (6,7,8,9) 
+                WHEN u.month IN (5,6,7,8,9,10) 
                 THEN ROUND(COALESCE(u.midpeak / NULLIF(t.total_monthly, 0) * 100, 0), 2)
                 ELSE NULL 
             END as summer_midpeak_ratio,
@@ -88,7 +89,7 @@ try:
                 ELSE NULL 
             END as nonsummer_offpeak_ratio,
             CASE 
-                WHEN u.month IN (6,7,8,9) 
+                WHEN u.month IN (5,6,7,8,9,10) 
                 THEN ROUND(COALESCE(u.offpeak / NULLIF(t.total_monthly, 0) * 100, 0), 2)
                 ELSE NULL 
             END as summer_offpeak_ratio,
@@ -98,7 +99,7 @@ try:
                 ELSE NULL 
             END as nonsummer_sat_midpeak_ratio,
             CASE 
-                WHEN u.month IN (6,7,8,9) 
+                WHEN u.month IN (5,6,7,8,9,10) 
                 THEN ROUND(COALESCE(u.sat_midpeak / NULLIF(u.midpeak, 0) * 100, 0), 2)
                 ELSE NULL 
             END as summer_sat_midpeak_ratio,
@@ -125,56 +126,74 @@ try:
     for feature in features:
         final_df[feature].fillna(final_df[feature].mean(), inplace=True)
     
-    # 標準化數據
-    X = StandardScaler().fit_transform(final_df[features])
+    # 計算每個案場的平均特徵值
+    site_features = final_df.groupby('site')[features].mean().reset_index()
+    print("\n各案場的平均特徵值：")
+    print(site_features)
     
-    def perform_kmeans_analysis(k, X, final_df, features, output_folder, suffix=''):
+    # 標準化數據
+    X = StandardScaler().fit_transform(site_features[features])
+    
+    def perform_kmeans_analysis(k, X, site_features, final_df, features, output_folder, suffix=''):
         print(f"\n執行 K={k} 的分群分析...")
         
+        # 對案場進行分群
         kmeans = KMeans(n_clusters=k, random_state=42)
-        cluster_labels = kmeans.fit_predict(X)
+        site_features['Cluster'] = kmeans.fit_predict(X)
         
-        result_df = final_df.copy()
-        result_df['Cluster'] = cluster_labels
+        # 將分群結果映射回原始數據
+        site_cluster_map = site_features.set_index('site')['Cluster'].to_dict()
+        final_df['Cluster'] = final_df['site'].map(site_cluster_map)
         
+        # 分析每個群集的特徵
         print(f"\nK={k} 各群集特徵分析：")
-        cluster_analysis = result_df.groupby('Cluster')[features].mean()
+        cluster_analysis = site_features.groupby('Cluster')[features].mean()
         print(cluster_analysis)
         
+        # 儲存分析結果
         excel_file = os.path.join(output_folder, f'kmeans_analysis_k{k}{suffix}.xlsx')
-        with pd.ExcelWriter(excel_file) as writer:
-            result_df.to_excel(writer, sheet_name='Raw_Data', index=False)
-            cluster_analysis.to_excel(writer, sheet_name='Cluster_Analysis')
+        try:
+            with pd.ExcelWriter(excel_file, mode='w') as writer:
+                final_df.to_excel(writer, sheet_name='Raw_Data', index=False)
+                cluster_analysis.to_excel(writer, sheet_name='Cluster_Analysis')
+                site_features.to_excel(writer, sheet_name='Site_Features', index=False)
+        except PermissionError:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            excel_file = os.path.join(output_folder, f'kmeans_analysis_k{k}{suffix}_{timestamp}.xlsx')
+            with pd.ExcelWriter(excel_file, mode='w') as writer:
+                final_df.to_excel(writer, sheet_name='Raw_Data', index=False)
+                cluster_analysis.to_excel(writer, sheet_name='Cluster_Analysis')
+                site_features.to_excel(writer, sheet_name='Site_Features', index=False)
         
+        # 視覺化分群結果
         pca = PCA(n_components=2)
         X_pca = pca.fit_transform(X)
         
         fig = px.scatter(
             x=X_pca[:, 0], 
             y=X_pca[:, 1],
-            color=result_df['Cluster'].astype(str),
+            color=site_features['Cluster'].astype(str),
             hover_data={
-                'Site': result_df['site'],
-                'Year': result_df['year'],
-                'Month': result_df['month'],
-                'Peak Ratio': result_df['peak_ratio'],
-                'Non-Summer Mid-peak': result_df['nonsummer_midpeak_ratio'],
-                'Summer Mid-peak': result_df['summer_midpeak_ratio'],
-                'Non-Summer Off-peak': result_df['nonsummer_offpeak_ratio'],
-                'Summer Off-peak': result_df['summer_offpeak_ratio'],
-                'Non-Summer Sat.Mid-peak': result_df['nonsummer_sat_midpeak_ratio'],
-                'Summer Sat.Mid-peak': result_df['summer_sat_midpeak_ratio']
+                'Site': site_features['site'],
+                'Peak Ratio': site_features['peak_ratio'],
+                'Non-Summer Mid-peak': site_features['nonsummer_midpeak_ratio'],
+                'Summer Mid-peak': site_features['summer_midpeak_ratio'],
+                'Non-Summer Off-peak': site_features['nonsummer_offpeak_ratio'],
+                'Summer Off-peak': site_features['summer_offpeak_ratio'],
+                'Non-Summer Sat.Mid-peak': site_features['nonsummer_sat_midpeak_ratio'],
+                'Summer Sat.Mid-peak': site_features['summer_sat_midpeak_ratio']
             },
-            title=f'用電模式分群結果 (K={k}) (PCA降維展示)'
+            title=f'案場用電模式分群結果 (K={k}) (PCA降維展示)'
         )
         
         fig.write_html(os.path.join(output_folder, f'kmeans_clusters_pca_k{k}{suffix}.html'))
         
+        # 特徵分布圖
         fig = go.Figure()
         for feature in features:
             fig.add_trace(go.Box(
-                y=result_df[feature],
-                x=result_df['Cluster'].astype(str),
+                y=site_features[feature],
+                x=site_features['Cluster'].astype(str),
                 name=feature,
                 boxpoints='all'
             ))
@@ -191,7 +210,7 @@ try:
         return excel_file
     
     # 找最佳的K值
-    max_k = min(10, len(final_df['site'].unique()) + 1)
+    max_k = min(len(site_features), 10)  # 最多分10類或案場數量
     silhouette_scores = []
     K = range(2, max_k)
     
@@ -207,23 +226,11 @@ try:
     print(f"\n最佳分群數量: {best_k}")
     
     # 執行不同K值的分析
-    best_k_files = perform_kmeans_analysis(best_k, X, final_df, features, output_folder, '_best')
-    k3_files = perform_kmeans_analysis(3, X, final_df, features, output_folder)
-    k4_files = perform_kmeans_analysis(4, X, final_df, features, output_folder)
+    best_k_files = perform_kmeans_analysis(best_k, X, site_features, final_df, features, output_folder, '_best')
+    k3_files = perform_kmeans_analysis(3, X, site_features, final_df, features, output_folder)
+    k4_files = perform_kmeans_analysis(4, X, site_features, final_df, features, output_folder)
     
-    print("\n分析完成！已生成以下檔案：")
-    print(f"1. 最佳分群數(K={best_k})的結果：")
-    print(f"   - kmeans_analysis_k{best_k}_best.xlsx")
-    print(f"   - kmeans_clusters_pca_k{best_k}_best.html")
-    print(f"   - kmeans_feature_distribution_k{best_k}_best.html")
-    print("\n2. K=3 的結果：")
-    print("   - kmeans_analysis_k3.xlsx")
-    print("   - kmeans_clusters_pca_k3.html")
-    print("   - kmeans_feature_distribution_k3.html")
-    print("\n3. K=4 的結果：")
-    print("   - kmeans_analysis_k4.xlsx")
-    print("   - kmeans_clusters_pca_k4.html")
-    print("   - kmeans_feature_distribution_k4.html")
+    print("\n分析完成！")
 
 except (Exception, psycopg2.Error) as error:
     print("\n執行時發生錯誤：")
